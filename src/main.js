@@ -33,13 +33,12 @@ function calculateSimpleRevenue(purchase, _product) {
 // @TODO: Расчет бонуса от позиции в рейтинге
 function calculateBonusByProfit(index, total, seller) {
   const { profit } = seller;
-  //const total = sellerStats.length - 1;
   if (index === 0) {
     return profit * 0.15;
-  } else if (index === 1 && index === 2) {
-    return profit * 0.1;
   } else if (index === total - 1) {
     return 0;
+  } else if (index === 1 || index === 2) {
+    return profit * 0.1;
   } else {
     // Для всех остальных
     return profit * 0.05;
@@ -56,24 +55,24 @@ function analyzeSalesData(data, options) {
   //@TODO: Проверка входных данных
   if (
     !data ||
-    (!Array.isArray(data.sellers) &&
-      !Array.isArray(data.products) &&
-      !Array.isArray(data.purchase_records)) ||
-    (data.sellers.length === 0 &&
-      data.products.length === 0 &&
-      data.purchase_records.length === 0)
+    !Array.isArray(data.sellers) ||
+    !Array.isArray(data.products) ||
+    !Array.isArray(data.purchase_records) ||
+    data.sellers.length === 0 ||
+    data.products.length === 0 ||
+    data.purchase_records.length === 0
   ) {
     throw new Error("Некорректные входные данные");
   }
   // @TODO: Проверка наличия опций
-  const { calculateRevenue } = options; // Сюда передадим функции для расчётов
-  //!!Разобраться с именами переменных, что туда класть!!
+  const { calculateRevenue, calculateBonus } = options; // Сюда передадим функции для расчётов
+
   if (!data || !options) {
     throw new Error("Чего-то не хватает");
   }
 
-  typeof calculateRevenue === "function";
-  typeof calculateBonus === "function";
+  //typeof calculateRevenue === "function";
+  //typeof calculateBonus === "function";
   // @TODO: Подготовка промежуточных данных для сбора статистики
   const sellerStats = data.sellers.map((seller) => ({
     id: seller.id,
@@ -103,12 +102,13 @@ function analyzeSalesData(data, options) {
     // Чек
     const seller = sellerIndex[record.seller_id]; // Продавец
     seller.sales_count += 1; // Увеличить количество продаж
-    seller.revenue += record.total_amount - record.total_discount; // Увеличить общую сумму выручки всех продаж
+    seller.revenue +=
+      Math.round(record.total_amount) - Math.round(record.total_discount); // Увеличить общую сумму выручки всех продаж
     //Расчёт прибыли для каждого товара
     record.items.forEach((item) => {
       const product = productIndex[item.sku]; // Товар
       const cost = product.purchase_price * item.quantity; // Посчитать себестоимость (cost) товара как product.purchase_price, умноженную на количество товаров из чека
-      const itemRevenue = calculateSimpleRevenue(item, product); // Посчитать выручку (revenue) с учётом скидки через функцию calculateRevenue
+      const itemRevenue = calculateRevenue(item, product); // Посчитать выручку (revenue) с учётом скидки через функцию calculateRevenue
       // Посчитать прибыль: выручка минус себестоимость
       seller.profit += itemRevenue - cost; // Увеличить общую накопленную прибыль (profit) у продавца
       // Учёт количества проданных товаров
@@ -133,7 +133,7 @@ function analyzeSalesData(data, options) {
   // @TODO: Назначение премий на основе ранжирования
   sellerStats.forEach((seller, index) => {
     const total = sellerStats.length;
-    seller.bonus = calculateBonusByProfit(index, total, seller); // Считаем бонус
+    seller.bonus = calculateBonus(index, total, seller); // Считаем бонус
     // Формируем топ-10 товаров
     seller.top_products = Object.entries(seller.products_sold)
       .map(([sku, quantity]) => ({
